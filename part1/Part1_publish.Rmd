@@ -12,14 +12,29 @@ library(tidyverse)
 library(ggplot2)
 library(ggpmisc)
 library(cowplot)
+knitr::opts_chunk$set(fig.path='Figs/')
 ```
+
+### **Revisions: 1/4/2018**
+Hi! After I posted, two things were pointed out to me that changed the results a little:
+
+1. Many people start in Newcomer. I changed my filter from collecting only those with at least one Novice point to collecting those with at least one Novice or Newcomer point. I also changed my time-by-region graphs to look at date of first record (whether Newcomer or Novice, where before the first record was necessarily Novice)
+2. The rule change that modified required Novice points from 20 to 15 happened at the start of 2013. I changed the filter in the section that looks at Novices to include data from 2013 onwards.
+
+I applied the changes throughout the R and Tableau; here's a summary of what's different:
+
+1. 9% of current Intermediate (not 12%) have exactly 15 Novice points and no Intermediate points
+2. 40% of current Intermediate points (not 50%) have between 15 and 30 Novice points and no Intermediate points
+3. When comparing those with 15 Novice points and those with more than 15 Novice points, the difference in how often they place 1st-5th at a tier 3 or 1st-3rd at a tier 2 in Intermediate is reduced. The p-valu in the other region is now 0.068. All regions still trend in the same direction as they did before.
+
+It was also pointed out to me many times that Novices with 15 points currently (that they earned prior to 2018) would be "grandfathered in" -- if you are one of these Novices and you want to compete in Intermediate, you should file a petition with the event you're competing at, and this petition will be automatically approved.
 
 ## **Introduction**
 Saying that West Coast Swing is my primary hobby might be an understatement at this point -- I dance one or two nights a week, attend a convention about once a month, and practice... maybe not as often as I should, but sometimes. Many of my friends are ones I met through dance, and sometimes we talk about West Coast Swing even when we're not dancing. Suffice it to say, I end up thinking about this dance a lot (I know, I'm really cool).
 
 In my 4 years of dancing, I've often had passing wonderings about various aspects of the dance. Luckily, the World Swing Dance Council (WSDC) tracks competition results for West Coast Swing, so there's plenty of data to play with -- conveniently, that makes good practice material for my learning and exploration in the world of data science. There are too many of these questions to cover in one post (...and I don't know how to do everything I want to do yet), but here's the first installment! It's mostly inspired by discussions around the rule changes that take effect in 2018.
 
-As an aside: I'm pretty new to this, so I'm sure this is incredibly poorly-written code. I was pretty hesitant to make this post at all, but the topic is sort of timely, and I can't improve if I don't put myself out there, right? So if you are a computery person who is feeling generous, I would love if you could take a look and help me destupidify my code (Python and R both)! [You can find all files used here](https://github.com/conniewang3/WSDC-Project/tree/master/part1). Shoot me a message -- I'd be happy to buy you lunch/coffee for your help, or skilltrade a dance lesson or something. 
+As an aside: I'm pretty new to this, so I'm sure this is incredibly poorly-written code. I was pretty hesitant to make this post at all, but the topic is sort of timely, and I can't improve if I don't put myself out there, right? So if you are a computery person who is feeling generous, I would love if you could take a look and help me destupidify my code (Python and R both)! [You can find all files used (including the version of this page that doesn't hide code chunks) here](https://github.com/conniewang3/WSDC-Project/tree/master/part1). Shoot me a message -- I'd be happy to buy you lunch/coffee for your help, or skilltrade a dance lesson or something. 
 
 
 ## **TL;DR**
@@ -47,9 +62,9 @@ I'll define "active" competitors in this post as having gotten a point in any di
 
 #### **How many All-Star dancers will be demoted?**
 
-```{r new_als, warning=FALSE}
+```{r new_als, warning=FALSE, echo=FALSE}
 # Read in data and filter out those who are not active (no nov-als points in the last 3 years)
-data <- tbl_df(read.csv('data.csv', as.is=TRUE)) %>%
+data <- tbl_df(read.csv('data_with_newcomer.csv', as.is=TRUE)) %>%
   filter(as.Date(paste(end_date, '01'), '%B %Y %d') > as.Date('2015-01-01'))
 
 # Filter by division and number of All-Star points in 3 years to count those who are demoted
@@ -72,7 +87,7 @@ Those with at 45+ Advanced points in the last 3 years but 0 All-Star points can 
 
 As regional variation is kind of the theme of this post, I broke down the percentage of All-Star-eligible dancers who will be demoted by region. Note that WSDC doesn't keep data on where each dancer lives, so region data was inferred based on what events the dancer earned points at. Midwest includes Texas, Europe includes Israel, and Other is Asia/Australia/NZ/Brazil (more details at the bottom if you're interested).
 
-```{r als_byregion}
+```{r als_byregion, echo=FALSE}
 # Find total All-Star-eligible by region
 total_region <- data %>%
   filter(division == 'All-Star' | adv_3y >= 45) %>%
@@ -118,15 +133,15 @@ Under the old rules, dancers with 15+ Novice points must compete in Intermediate
 1. How many dancers will be "demoted" by the change? How many dancers will be allowed to return to Novice as a result of the change? 
 2. Do dancers with exactly 15 Novice points do worse in Intermediate than those with more than 15?
 
-To answer these questions, I looked at only dancers who pointed out of Novice after February 2015 (when the old rules took effect). I wasn't able to find copies of the old rules so I don't know when exactly the point requirement became 15 -- if you have this information, I'd love to know!
-
+To answer these questions, I looked at only dancers who pointed out of
+Novice after February 2013 (when the point requirement changed from 20 to 15 points).
 
 #### **How many dancers will be "demoted" and how many can now choose to dance down?**
 
-```{r new_novice}
+```{r new_novice, echo=FALSE}
 # Filter out those who pointed out of Novice before February 2015
 new_novice <- data %>%
-  filter(as.Date(paste(nov_end, '01'), '%B %Y %d') > as.Date('2015-02-01'))
+  filter(as.Date(paste(nov_end, '01'), '%B %Y %d') > as.Date('2013-02-01'))
 
 # Filter by number of Novice and Intermediate points to count affected dancers 
 must_nov <- nrow(new_novice %>% filter(nov_points == 15, int_points == 0))
@@ -141,11 +156,11 @@ percents <- c(round(must_nov/total_nov*100, 0),
               round(can_nov/total_int*100, 0))
 ```
 
-Of people who were previously competing in Intermediate, **`r must_nov`** now *must* compete in Novice, and **`r can_nov`** now *have the option* to compete in Novice. This represents **`r percents[1]`%** and **`r percents[2]`%** of current Novice dancers or **`r percents[3]`%** and **`r percents[4]`%** of current Intermediate dancers. 
+Of people who were previously competing in Intermediate, **`r must_nov`** now *must* compete in Novice (unless they submit a petition, which will be automatically approved), and **`r can_nov`** now *have the option* to compete in Novice. This represents **`r percents[1]`%** and **`r percents[2]`%** of current Novice dancers or **`r percents[3]`%** and **`r percents[4]`%** of current Intermediate dancers. 
 
 I'm pretty surprised by how high these numbers are, actually. I wonder how many of these dancers are actually in the presumed target group of dancers who compete only once in Novice... (quiet sounds of number-crunching in the background)
 
-```{r just_wondering}
+```{r just_wondering, echo=FALSE}
 one_comp <- nrow(filter(new_novice, nov_count == 1, nov_points == 15, int_points == 0))
 percent <- round(one_comp/must_nov*100, 0)
 
@@ -153,11 +168,11 @@ percent <- round(one_comp/must_nov*100, 0)
 mean_comps <- round(mean(filter(new_novice, nov_points == 15, int_points == 0)$nov_count), 0)
 ```
 
-Wow, I totally overestimated the number of Novice dancers who got their 15 points exactly all in one go. I really thought the change from 15 to 16 points was targeted at dancers who get one lucky draw at a tier 3 comp, place 1st, and are immediately out. Turns out, that's only **`r percent`%** of total affected dancers (those with exactly 15 Novice points and 0 Intermediate points). In fact, the average affected dancer has competed **`r mean_comps`** times in Novice! Actually, now that I think about it, this makes sense -- most Novice dancers who get out via a small number of placements vs. one point at a time will overshoot 15.
+Wow, I totally overestimated the number of Novice dancers who got their 15 points exactly all in one go. I really thought the change from 15 to 16 points was targeted at dancers who get one lucky draw at a tier 3 comp, place 1st, and are immediately out. Turns out, that's only **`r percent`%** of total affected dancers (those with exactly 15 Novice points and 0 Intermediate points). In fact, the average affected dancer has gotten points at **`r mean_comps`** Novice competitions! Actually, now that I think about it, this makes sense -- most Novice dancers who get out via a small number of placements vs. one point at a time will overshoot 15.
 
 Now let's break down of the number of 15-point-Novice-graduates in each region, taken as a percentage of total Novice grads. This is meant to give a measure of how much the rule change will impact each region going forward. 
 
-```{r nov_byregion}
+```{r nov_byregion, echo=FALSE}
 # Count total dancers per region who are not in Novice
 # Use only those who graduated Novice under the 2015 rules
 total_region <- new_novice %>% filter(division != 'Novice') %>% count(region)
@@ -201,7 +216,7 @@ It seems that the Midwest has a relatively lower proportion of dancers who escap
 
 I'm kind of surprised, honestly. As for interpretation -- dancers in the Midwest go to fewer tier 3 Novice divisions maybe? A tier 3 Novice division gives out a single point more frequently than tier 2 (where only 5th-10th get a single point) and tier 1 (where only 5th place gets a single point), and is also the only way to get 15 points in one go. That's about all I can think of.
 
-For good measure, I also broke down the mean number of Novice events for 15-point-Novices by region. It's about the same across regions: 4-ish events. 
+For good measure, I also broke down the mean number of pointed Novice events for 15-point-Novices by region. It's about the same across regions: 4-ish events. 
 
 
 #### **How well do 15-point Novice dancers do in Intermediate?**
@@ -211,7 +226,7 @@ The downside of using time rather then number of competitions is that it penaliz
 
 I also broke down results by region, to account for any variation there.
 
-```{r nov_readiness_time}
+```{r nov_readiness_time, echo=FALSE}
 # Add variables for time to first intermediate point
 # Use only those who graduated Novice under 2015 rules
 nov_readiness_time <- new_novice %>%
@@ -244,13 +259,13 @@ names(to_print) <- c('15 Points', '16+ Points', 'p-value')
 to_print
 ```
 
-Because the medians of each region are comparable to each other, I decided to look at combined data from all the regions. Across regions, we find 99% confidence that dancers with exactly 15 Novice points **take longer on average to get their first Intermediate point**. 
+Because the medians of each region are comparable to each other, I decided to look at combined data from all the regions. Across regions, we find >99% confidence that dancers with exactly 15 Novice points **take longer on average to get their first Intermediate point**. 
 
 On the other hand, the difference in medians is only about 2 months, so how much does that really matter?
 
 [Stats note: quick histograms of the data (not shown) revealed it's pretty skewed across all regions, hence I've used medians and nonparametric hypothesis testing]
 
-```{r nov_readiness_ratio}
+```{r nov_readiness_ratio, echo=FALSE}
 # Add variables for ratio of placements to total
 # Use only those who graduated Novice under 2015 rules
 nov_readiness_ratio <- new_novice %>%
@@ -279,7 +294,7 @@ lapply(split(nov_readiness_ratio, nov_readiness_ratio$region), function(x)with(x
 
 Well, it looks like the low incidence of placing 1st-5th at a tier 3 or 1st-3rd at a tier 2 has maybe come back to bite us -- this data is decidedly not as pretty.
 
-Significance testing by region, we see that dancers in the Other region (Asia/Australia/Brazil) with exactly 15 Novice points **place less frequently in Intermediate**. The is also the trend in 3 of the other 4 regions (East Coast, Europe, Midwest), although the differences there are not significant. 
+Significance testing by region, we see a 93% confidence that dancers in the Other region (Asia/Australia/Brazil) with exactly 15 Novice points **place less frequently in Intermediate**. The is also the trend in 3 of the other 4 regions (East Coast, Europe, Midwest), although the differences there are less significant. 
 
 Combining the two metrics, there is some evidence that Novice dancers with exactly 15 points do slightly worse in Intermediate than those with more than 15 points. Although it's not a large difference, and changing the requirement from 15 to 16 points is unlikely to do much, this does justify the rule change somewhat.
 
@@ -293,35 +308,35 @@ One question that's come up in the discussions surrounding the rule changes is w
 
 The most direct way to look at growth is to see what percentage of active competitors (at least 1 point in the last 2 years) live in each region. I'm about 90% sure that I did this in the stupidest possible way, but hey, the plots work so I think that deserves partial credit.
 
-```{r percent_byregion, fig.width=8}
+```{r percent_byregion, fig.width=8, echo=FALSE}
 # Tracking percent of total actively competing dancers who live in each region
 percent_byregion <- data %>%
-  mutate(nov_start = as.Date(paste(nov_start, '01'), '%B %Y %d')) %>%
+  mutate(all_start = as.Date(paste(ifelse(is.na(nov_start), new_start, nov_start), '01'), '%B %Y %d')) %>%
   group_by(region) %>%
-  count(nov_start) %>%
+  count(all_start) %>%
   mutate(count = cumsum(n)) %>%
-  filter(nov_start >= as.Date('2012-01-01'))
+  filter(all_start >= as.Date('2012-01-01'))
 
 # Get total number of dancers across regions by date
 totals <- data %>%
-  mutate(nov_start = as.Date(paste(nov_start, '01'), '%B %Y %d')) %>%
-  count(nov_start) %>%
+  mutate(all_start = as.Date(paste(ifelse(is.na(nov_start), new_start, nov_start), '01'), '%B %Y %d')) %>%
+  count(all_start) %>%
   mutate(total_count = cumsum(n)) %>%
-  filter(nov_start >= as.Date('2012-01-01'))
+  filter(all_start >= as.Date('2012-01-01'))
 
 # Join the data frames together to calculate percent of total for each region
 totals <- bind_rows(totals, totals, totals, totals, totals)
 totals <- totals %>% mutate(region = c(rep('East Coast', 72), rep('Europe', 72), rep('Midwest', 72), rep('Other', 72), rep('West Coast', 72)))
-percent_byregion <- left_join(totals, percent_byregion, by = c("nov_start", "region"))
-filled <- percent_byregion %>% 
+percent_byregion <- left_join(totals, percent_byregion, by = c("all_start", "region"))
+filled <- percent_byregion %>%
   fill(count)
 percent_byregion <- filled %>%
   mutate(percent = count / total_count * 100) %>%
-  select(nov_start, region, percent)
+  select(all_start, region, percent)
 
 # Combine all the US regions
-US_percent <- percent_byregion %>% 
-  group_by(nov_start) %>%
+US_percent <- percent_byregion %>%
+  group_by(all_start) %>%
   filter(region %in% c('West Coast', 'East Coast', 'Midwest')) %>%
   summarize(percent = sum(percent)) %>%
   mutate(region = 'US (total)')
@@ -330,13 +345,13 @@ US_percent <- percent_byregion %>%
 percent_byregion2 <- bind_rows(US_percent, filter(percent_byregion, region %in% c('Europe', 'Other')))
 
 # Build plots
-all_regions <- ggplot(percent_byregion, aes(x=nov_start, y=percent, fill=region)) +
+all_regions <- ggplot(percent_byregion, aes(x=all_start, y=percent, fill=region)) +
   geom_bar(position='stack', stat='identity') +
-  coord_cartesian(xlim = as.Date(c('2013-01-01', '2017-12-01'))) +
+  #coord_cartesian(xlim = as.Date(c('2013-01-01', '2017-12-01'))) +
   theme(axis.title.x=element_blank(), axis.title.y=element_blank()) +
   labs(fill = 'Region', title = 'Percent of active competitors in each region')
 
-combined_US <- ggplot(percent_byregion2, aes(x=nov_start, y=percent, fill=region)) +
+combined_US <- ggplot(percent_byregion2, aes(x=all_start, y=percent, fill=region)) +
   geom_bar(position='stack', stat='identity') +
   coord_cartesian(xlim = as.Date(c('2013-01-01', '2017-12-01'))) +
   theme(axis.title.x=element_blank(), axis.title.y=element_blank()) +
@@ -356,20 +371,20 @@ In trying to write this, I discovered that it's more difficult than I thought to
 
 I decided to total the number of times a point was awarded by an event in each region in 2014-2018 (using eventregions.py) and divide the number of competitors by that quantity. This is used as a proxy that depends much less on number of events and size of events in the region.
 
-```{r count_byregion, fig.width=8}
+```{r count_byregion, fig.width=8, echo=FALSE}
 # Tracking total number of active dancers per region
 count_byregion <- data %>%
-  mutate(nov_start = as.Date(paste(nov_start, '01'), '%B %Y %d')) %>%
+  mutate(all_start = as.Date(paste(ifelse(is.na(nov_start), new_start, nov_start), '01'), '%B %Y %d')) %>%
   group_by(region) %>%
-  count(nov_start) %>%
+  count(all_start) %>%
   mutate(total_count = cumsum(n))
 
 # Make cumulative US data
 US_data <- data %>%
-  mutate(nov_start = as.Date(paste(nov_start, '01'), '%B %Y %d')) %>%
+  mutate(all_start = as.Date(paste(ifelse(is.na(nov_start), new_start, nov_start), '01'), '%B %Y %d')) %>%
   mutate(region = ifelse(region %in% c('Europe', 'Other'), region, 'US (net)')) %>%
   group_by(region) %>%
-  count(nov_start) %>%
+  count(all_start) %>%
   mutate(total_count = cumsum(n))
 
 # Add to the rest of the data
@@ -383,7 +398,7 @@ count_byregion <- left_join(count_byregion, event_count, by='region')
 count_byregion <- count_byregion %>%
   # Dividing by number of point-award-instances in region
   mutate(total_count = (total_count / count)) %>%
-  mutate(months = as.integer(nov_start - as.Date('2014-01-01'))/30) %>%
+  mutate(months = as.integer(all_start - as.Date('2014-01-01'))/30) %>%
   filter(months > 0) %>%
   ungroup() %>%
   mutate(region = as.factor(region))

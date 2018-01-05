@@ -19,13 +19,13 @@ knitr::opts_chunk$set(fig.path='Figs/')
 Hi! After I posted, two things were pointed out to me that changed the results a little:
 
 1. Many people start in Newcomer. I changed my filter from collecting only those with at least one Novice point to collecting those with at least one Novice or Newcomer point. I also changed my time-by-region graphs to look at date of first record (whether Newcomer or Novice, where before the first record was necessarily Novice)
-2. The rule change that modified required Novice points from 20 to 15 happened at the start of 2013. I changed the filter in the section that looks at Novices to include data from 2013 onwards.
+2. The rule change that modified required Novice points from 20 to 15 happened at the start of 2012. I changed the filter in the section that looks at Novices to include data from 2012 onwards.
 
 I applied the changes throughout the R and Tableau; here's a summary of what's different:
 
 1. 9% of current Intermediate (not 12%) have exactly 15 Novice points and no Intermediate points
-2. 40% of current Intermediate points (not 50%) have between 15 and 30 Novice points and no Intermediate points
-3. When comparing those with 15 Novice points and those with more than 15 Novice points, the difference in how often they place 1st-5th at a tier 3 or 1st-3rd at a tier 2 in Intermediate is reduced. The p-valu in the other region is now 0.068. All regions still trend in the same direction as they did before.
+2. 38% of current Intermediate points (not 50%) have between 15 and 30 Novice points and no Intermediate points
+3. When comparing those with 15 Novice points and those with more than 15 Novice points, the difference in how often they place 1st-5th at a tier 3 or 1st-3rd at a tier 2 in Intermediate is reduced. The p-value in the other region is now 0.068. All regions still trend in the same direction as they did before.
 
 It was also pointed out to me many times that Novices with 15 points currently (that they earned prior to 2018) would be "grandfathered in" -- if you are one of these Novices and you want to compete in Intermediate, you should file a petition with the event you're competing at, and this petition will be automatically approved.
 
@@ -139,9 +139,9 @@ Novice after February 2013 (when the point requirement changed from 20 to 15 poi
 #### **How many dancers will be "demoted" and how many can now choose to dance down?**
 
 ```{r new_novice, echo=FALSE}
-# Filter out those who pointed out of Novice before February 2015
+# Filter out those who pointed out of Novice before January 2012
 new_novice <- data %>%
-  filter(as.Date(paste(nov_end, '01'), '%B %Y %d') > as.Date('2013-02-01'))
+  filter(as.Date(paste(nov_end, '01'), '%B %Y %d') > as.Date('2012-02-01'))
 
 # Filter by number of Novice and Intermediate points to count affected dancers 
 must_nov <- nrow(new_novice %>% filter(nov_points == 15, int_points == 0))
@@ -311,32 +311,32 @@ The most direct way to look at growth is to see what percentage of active compet
 ```{r percent_byregion, fig.width=8, echo=FALSE}
 # Tracking percent of total actively competing dancers who live in each region
 percent_byregion <- data %>%
-  mutate(nov_start = as.Date(paste(nov_start, '01'), '%B %Y %d')) %>%
+  mutate(all_start = as.Date(paste(ifelse(is.na(nov_start), new_start, nov_start), '01'), '%B %Y %d')) %>%
   group_by(region) %>%
-  count(nov_start) %>%
+  count(all_start) %>%
   mutate(count = cumsum(n)) %>%
-  filter(nov_start >= as.Date('2012-01-01'))
+  filter(all_start >= as.Date('2012-01-01'))
 
 # Get total number of dancers across regions by date
 totals <- data %>%
-  mutate(nov_start = as.Date(paste(nov_start, '01'), '%B %Y %d')) %>%
-  count(nov_start) %>%
+  mutate(all_start = as.Date(paste(ifelse(is.na(nov_start), new_start, nov_start), '01'), '%B %Y %d')) %>%
+  count(all_start) %>%
   mutate(total_count = cumsum(n)) %>%
-  filter(nov_start >= as.Date('2012-01-01'))
+  filter(all_start >= as.Date('2012-01-01'))
 
 # Join the data frames together to calculate percent of total for each region
 totals <- bind_rows(totals, totals, totals, totals, totals)
 totals <- totals %>% mutate(region = c(rep('East Coast', 72), rep('Europe', 72), rep('Midwest', 72), rep('Other', 72), rep('West Coast', 72)))
-percent_byregion <- left_join(totals, percent_byregion, by = c("nov_start", "region"))
-filled <- percent_byregion %>% 
+percent_byregion <- left_join(totals, percent_byregion, by = c("all_start", "region"))
+filled <- percent_byregion %>%
   fill(count)
 percent_byregion <- filled %>%
   mutate(percent = count / total_count * 100) %>%
-  select(nov_start, region, percent)
+  select(all_start, region, percent)
 
 # Combine all the US regions
-US_percent <- percent_byregion %>% 
-  group_by(nov_start) %>%
+US_percent <- percent_byregion %>%
+  group_by(all_start) %>%
   filter(region %in% c('West Coast', 'East Coast', 'Midwest')) %>%
   summarize(percent = sum(percent)) %>%
   mutate(region = 'US (total)')
@@ -345,13 +345,13 @@ US_percent <- percent_byregion %>%
 percent_byregion2 <- bind_rows(US_percent, filter(percent_byregion, region %in% c('Europe', 'Other')))
 
 # Build plots
-all_regions <- ggplot(percent_byregion, aes(x=nov_start, y=percent, fill=region)) +
+all_regions <- ggplot(percent_byregion, aes(x=all_start, y=percent, fill=region)) +
   geom_bar(position='stack', stat='identity') +
-  coord_cartesian(xlim = as.Date(c('2013-01-01', '2017-12-01'))) +
+  #coord_cartesian(xlim = as.Date(c('2013-01-01', '2017-12-01'))) +
   theme(axis.title.x=element_blank(), axis.title.y=element_blank()) +
   labs(fill = 'Region', title = 'Percent of active competitors in each region')
 
-combined_US <- ggplot(percent_byregion2, aes(x=nov_start, y=percent, fill=region)) +
+combined_US <- ggplot(percent_byregion2, aes(x=all_start, y=percent, fill=region)) +
   geom_bar(position='stack', stat='identity') +
   coord_cartesian(xlim = as.Date(c('2013-01-01', '2017-12-01'))) +
   theme(axis.title.x=element_blank(), axis.title.y=element_blank()) +
@@ -374,17 +374,17 @@ I decided to total the number of times a point was awarded by an event in each r
 ```{r count_byregion, fig.width=8, echo=FALSE}
 # Tracking total number of active dancers per region
 count_byregion <- data %>%
-  mutate(nov_start = as.Date(paste(nov_start, '01'), '%B %Y %d')) %>%
+  mutate(all_start = as.Date(paste(ifelse(is.na(nov_start), new_start, nov_start), '01'), '%B %Y %d')) %>%
   group_by(region) %>%
-  count(nov_start) %>%
+  count(all_start) %>%
   mutate(total_count = cumsum(n))
 
 # Make cumulative US data
 US_data <- data %>%
-  mutate(nov_start = as.Date(paste(nov_start, '01'), '%B %Y %d')) %>%
+  mutate(all_start = as.Date(paste(ifelse(is.na(nov_start), new_start, nov_start), '01'), '%B %Y %d')) %>%
   mutate(region = ifelse(region %in% c('Europe', 'Other'), region, 'US (net)')) %>%
   group_by(region) %>%
-  count(nov_start) %>%
+  count(all_start) %>%
   mutate(total_count = cumsum(n))
 
 # Add to the rest of the data
@@ -398,7 +398,7 @@ count_byregion <- left_join(count_byregion, event_count, by='region')
 count_byregion <- count_byregion %>%
   # Dividing by number of point-award-instances in region
   mutate(total_count = (total_count / count)) %>%
-  mutate(months = as.integer(nov_start - as.Date('2014-01-01'))/30) %>%
+  mutate(months = as.integer(all_start - as.Date('2014-01-01'))/30) %>%
   filter(months > 0) %>%
   ungroup() %>%
   mutate(region = as.factor(region))
