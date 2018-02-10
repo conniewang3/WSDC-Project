@@ -124,6 +124,9 @@ class DanceScraper:
                 new_entry['als_first'] = '1' in results
                 new_entry['als_3y'] = sum(a*b for a,b in zip(points, 
                                                              is_relevant))
+            elif division == 'Masters':
+                new_entry['mas_points'] = entry['total_points']
+                new_entry['mas_place'] = sum(i > 5 for i in points)
             else: 
                 continue
 
@@ -134,7 +137,9 @@ class DanceScraper:
         # be worth the effort)
         end_dates = [new_entry['new_end'], new_entry['nov_end'], new_entry['int_end'], 
                     new_entry['adv_end'], new_entry['als_end']]
-        new_entry['end_date'] = next((end_date for end_date in end_dates if end_date), '')
+        for date in end_dates:
+            if date != '':
+                new_entry['end_date'] = date 
 
         # This determines what division this person is currently competing in
         if new_entry['nov_points'] != 0:
