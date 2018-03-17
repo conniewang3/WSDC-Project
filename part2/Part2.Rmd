@@ -1,0 +1,443 @@
+---
+title: "WSDC Project Part 2: Taking Some Requests"
+author: "Connie Wang"
+date: "January 2, 2018"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(ggpmisc)
+library(cowplot)
+knitr::opts_chunk$set(fig.path="Figs/")
+```
+
+I feel a little guilty that it's been so long since my first post -- I really meant to make these more frequently, but I went like a month and a half without working on this project at all. Oops. I promise I'm working (in a long-run sense of the word) on gathering data from sources like DanceConvention.net and Step Right Solutions so that I can look at more than just the WSDC Registry, and also some different ways of looking at the data, but for now, here are the answers to a few questions that some people asked me after the previous post (#easywayout).
+
+
+## **TL;DR**
+...So this one really isn't mobile-friendly. Reopen on desktop to view the nifty interactive Tableau dashboard, otherwise the text TL;DR is this:
+
+1. Most pointed Masters competitors are in Novice or Intermediate.
+2. The distribution of points in Masters is super uneven, with the top Masters competitors (mostly Advanced and All-Star) holding the vast majority of Masters points.
+3. Median time to get out of Intermediate (time between first Intermediate point and first Advanced point) is 17 months; median time to get out of Advanced is 24 months.
+4. If we define "stalling out" in a division as taking longer than the 75th percentile time to get out of the division, those who stall out later in dance (i.e. those who make it to All-Star) took less time to get out of Novice/Intermediate.
+
+
+## **Introduction**
+After my first post, various people suggested other WSDC-related questions they were curious about. Some of them are fairly trivial to answer -- these are the ones I've picked for today's post. Because, as I've mentioned, I've gone weeks without making any progress on this project at all (my bad). The questions here came from my friends Goga Gordana and Ivy Grey -- thanks y'all!
+
+#### Section 1: Masters Division
+Goga brought my attention to an interesting question: is there any value to splitting the Masters division (those who are 50+ years of age) into "Open Masters" and "Novice Masters", or something of that ilk? Apparently there are some events that are considering this -- my first impression is that the goal would be to even the playing field in masters, rather than have some obviously more experienced dancers place every competition. To inform the decision from this standpoint, I looked into:
+
+1. The division breakdown of those who actively compete in Masters, and
+2. The points distribution among Masters competitors.
+
+#### Section 2: Performance Correlates
+Ivy asked a couple questions (among others) regarding performance in later divisions based on performance in earlier divisions, and relatedly, possible predictors of performance. This is a pretty broad topic that I'm planning to cover in a couple different ways later, but for now:
+
+1. Correlation between number of finals it takes to get out of one division and number of finals it takes to get out of the next
+2. Correlation between these statistics and when you "stall out"?
+  + Time to get out of Novice/Intermediate
+  + Number of finals to get out of Novice/Intermediate
+  + Whether or not you got a 1st before leaving
+  
+As in the previous post, we'll be looking at only currently active competitors -- defined as those who have gotten at least one point within the last 3 years.
+
+Also as in the previous division, all of the code I used is on Github.
+
+## Masters Division
+
+First, we'll look at how many Masters dancers are in each division. Since we don't have age data, the best we can do is to assume that Masters dancers are anyone with at least 1 Masters point. Note that this is very flawed, since many dancers who are eligible to compete in Masters currently don't, and many dancers who compete in Masters regularly have never gotten a point in Masters. 
+
+```{r import_data, warning=FALSE}
+data <- tbl_df(read.csv("data.csv", as.is=TRUE)) %>%
+  # Filter to only active competitors: those who have gotten a point in the last 3 years
+  filter(as.Date(paste(end_date, "01"), "%B %Y %d") > as.Date("2015-02-01"))
+```
+
+```{r masters_bydivision}
+# Filter to Masters dancers, count by division
+masters_bydivision <- data %>% 
+  filter(mas_points > 0) %>%
+  count(division)
+
+# Arrange the divisions from Newcomer to All-Star
+masters_bydivision$division <- factor(masters_bydivision$division, levels = c("Newcomer", "Novice", "Intermediate", "Advanced", "All-Star"))
+
+# Plot bars
+ggplot(masters_bydivision, aes(division, n, fill = division, color = division, label = n)) +
+  geom_bar(stat="identity") +
+  geom_text(nudge_y = 8, fontface = "bold", size = 8) +
+  theme(legend.position = "None") +
+  labs(title = "Number of Masters dancers in each division", x = "Division", y = "Count")
+```
+
+From this, we can see that the median dancer who has Masters points is in Intermediate. However, my guess is that there are actually many more Newcomer and Novice (and not-yet-in-the-WSDC-registry) Masters competitors in real life who are not accounted for here because they have never gotten a Masters point. Taking this into account, I think there's a good chance Masters division even has more Newcomer/Novice than Intermediate+ ("Open").
+
+Another factor that might motivate a decision to split Masters up by division is the problem of a few individuals placing/finaling all the time and taking away opportunity from other dancers. I looked at both total points and total "placements" (where instead of using actual placements, I used instances where more than 5 points were gained at once, which is top 5 at a tier 3 or top 3 at a tier 2 comp. This accounts for the fact that it"s easier to place at a small competition, which makes those placements less meaningful for this analysis.)
+
+```{r masters_distribution}
+# Filter to Masters dancers
+masters_distribution <- data %>%
+  filter(mas_points > 0)
+
+# Plot histogram of points 
+points <- ggplot(masters_distribution, aes(mas_points)) +
+  geom_histogram(binwidth=10, fill="cornflowerblue") +
+  labs(x = "Points", y = "Dancers", title = "Distribution of points and placements in Masters")
+
+# Plot histogram of placements
+placements <- ggplot(masters_distribution, aes(mas_place)) +
+  geom_histogram(binwidth=1, fill="cornflowerblue") +
+  labs(x = "Placements", y = "Dancers")
+
+plot_grid(points, placements, align = "v", ncol = 1, labels = NULL)
+```
+
+We do indeed see a super skewed distribution -- the long tails here sort of remind me of the whole "The top 1% of the US owns 39% of total wealth" thing, so I decided to visualize it in a similar manner. 
+
+```{r masters_inequality, fig.width=6}
+# Add new columns for binning by number of points/placements
+masters_inequality <- masters_distribution %>%
+  mutate(points_rank = percent_rank(mas_points)) %>%
+  mutate(place_rank = percent_rank(mas_place)) %>%
+  mutate(points_group = ifelse(points_rank < 0.5, "Bottom Half",
+                               ifelse(points_rank < 0.7, "Next 20%",
+                                      ifelse(points_rank < 0.85, "Next 15%", 
+                                             ifelse(points_rank < 0.95, "Next 10%", "Top 5%"))))) %>%
+  mutate(place_group = ifelse(place_rank < 0.5, "Bottom Half",
+                               ifelse(place_rank < 0.7, "Next 20%",
+                                      ifelse(place_rank < 0.85, "Next 15%", 
+                                             ifelse(place_rank < 0.95, "Next 10%", "Top 5%")))))
+
+# Get total sums of points and placements
+total_points <- sum(masters_inequality$mas_points)
+total_place <- sum(masters_inequality$mas_place)
+
+# Get sums of each bin for points, divide to get %
+inequality_points <- masters_inequality %>%
+  group_by(points_group) %>%
+  summarize(points_share = 100*sum(mas_points)/total_points)
+
+# Arrange the bins in the right order for plotting
+inequality_points$points_group <- factor(inequality_points$points_group, levels = c("Bottom Half", "Next 20%", "Next 15%", "Next 10%", "Top 5%"))
+
+# Plot bars for points
+points <- ggplot(inequality_points, aes(1, points_share, fill=points_group)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  theme(axis.line=element_blank(),axis.text.x=element_blank(), axis.title.x=element_blank(), axis.ticks=element_blank(), axis.text.y=element_blank(), legend.position = "top") +
+  labs(title = "Distribution of Points/Placements in Masters", x = "Points", fill = NULL)
+
+# Get sums of each bin for placements, divide to get %
+inequality_place <- masters_inequality %>%
+  group_by(place_group) %>%
+  summarize(place_share = 100*sum(mas_place)/total_place)
+
+# Arrange the bins in the right order for plotting
+inequality_place$place_group <- factor(inequality_place$place_group, levels = c("Bottom Half", "Next 20%", "Next 15%", "Next 10%", "Top 5%"))
+
+# Plot bars for placements
+placements <- ggplot(inequality_place, aes(1, place_share, fill=place_group)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE), size = 1) +
+  coord_flip() +
+  labs(y = "Share of total points/placements (%)", title = NULL, x = "Placements", fill = NULL) +
+  theme(axis.line=element_blank(), axis.ticks=element_blank(), axis.text.y=element_blank(), legend.position = "none", axis.title.x = element_text(size=16))
+
+plot_grid(points, placements, align = "v", ncol = 1, labels = NULL)
+```
+
+This visualization makes the imbalanced nature of the division more clear -- we see that the top 5% of Masters competitors by points have 38% of the total points while the bottom 50% have only 6% of the points. By placements, the top 5% have 48% of all placements, while over 50% of those with Masters points have literally never placed. In the case of both points and placements, the top 15% hold the majority share (66% of points and 74% of placements); let's see the division breakdown of just this 15%. Since the top 15% by points is mostly the same dancers as the top 15% by placements, we'll just use the top 15% by points.
+
+```{r top_breakdown}
+# Filter to top 15% by points, count by division
+top_breakdown_points <- masters_inequality %>%
+  filter(points_group %in% c("Top 5%", "Next 10%")) %>%
+  count(division)
+
+# Arrange the divisions from Newcomer to All-Star
+top_breakdown_points$division <- factor(top_breakdown_points$division, levels = c("Newcomer", "Novice", "Intermediate", "Advanced", "All-Star"))
+
+# Plot bars
+ggplot(top_breakdown_points, aes(division, n, fill=division, color=division, label=n)) +
+  geom_bar(stat="identity") +
+  theme(legend.position = "None") +
+  geom_text(nudge_y = 2, fontface = "bold", size = 6) +
+  labs(title = "Division breakdown of top 15% of dancers by points", x = "Division", y = "Count")
+```
+
+We can see here that almost none of this top 15% (that gets the vast majority of Masters points and placements) are in Novice or Newcomer, despite the fact that so many Masters dancers are in Novice or Newcomer. So there is definite truth to the idea that Masters division is dominated by just a few individuals, suggesting that it might be more fair to split the division up into "Novice Masters" and "Open Masters". Of course, this decision has much more to do with the feelings of competitors than with just data. For example, do Newcomer/Novice dancers sign up for the J&J for the chance to dance with top dancers in competition? Maybe they don't care about points at all and are just in it for this opportunity. It's also worth considering that there are likely dancers who a) don't think they're good enough and don't want to "drag their partner down" in prelims (I've heard multiple people say this while working comp reg at various events), or b) are higher level dancers and don't think it will be fun to draw a newer dancer (I have no evidence for this but could see people thinking this way). Regardless, here's the relevant data, to whatever extent it might aid the decisions of event directors.
+
+
+## Performance Correlates
+
+#### Does getting out of a division quickly mean you'll get out of later divisions more quickly?
+
+To answer this question, I looked at the correlation between the number of finals it takes to get out of one division and the number of finals it takes to get out of the next.
+
+```{r correlations, fig.width=8}
+# Correlations Nov vs. Int
+correlation_int <- data %>%
+  filter(division %in% c("Advanced", "All-Star"))
+
+
+# Plot scatterplot
+int <- ggplot(correlation_int, aes(nov_count, int_count)) +
+  geom_point() +
+  geom_smooth(method = 'lm') +
+  stat_poly_eq(formula = y ~ x,
+               aes(label =  ..rr.label..), 
+               parse = TRUE) +
+  labs(title = "Current Advanced and All-Star dancers", x = "Number of finals in Novice", y = "Number of finals in Intermediate")
+
+
+# Correlations Int vs. Adv
+correlation_adv <- data %>%
+  filter(adv_points >= 45) 
+
+# Plot scatterplot
+adv <- ggplot(correlation_adv, aes(int_count, adv_count)) +
+  geom_point() +
+  geom_smooth(method = 'lm') +
+  stat_poly_eq(formula = y ~ x,
+               aes(label =  ..rr.label..), 
+               parse = TRUE) +
+  labs(title = "Current All-Star-eligible dancers", x = "Number of finals in Intermediate", y = "Number of finals in Advanced")
+
+plot_grid(int, adv, align = "h", ncol = 2, labels = NULL)
+```
+
+As you can see, there's a really weak correlation here -- just because it takes you a lot of events to get out of Novice doesn't mean it will take you a lot of events to get out of Intermediate (heartening!). The correlation between Intermediate and Advanced is even weaker. Side note, some events have a combined Adv/All-Star JnJ, which gets recorded as Advanced rather than All-Star -- so, some of the finals in Advanced weren't finals necessary to getting out of Advanced, but actually competitions that happened after the dancer already qualified for All-Star. I wouldn't expect this to have a huge effect on the data though, and the correlation is so weak that I doubt this point makes any difference in our conclusion.
+
+#### Are there differences between dancers who "stall out" at different divisions?
+
+Another way of evaluating performance is looking at when people "stall out" in their dance (I don't mean any offense by this, I just couldn't think of a better term). I decided to try to estimate "stalling out" as when one's probability of moving to the next division drops below 25%. To get this figure, I looked at how long dancers in one division took to get their first point in the next division. If a dancer has taken longer than the 75th percentile time to get their first point in the next division, I'll refer to them as "stalled out" in their division. To give an example, if 75% of Advanced dancers got their first Advanced point 2 years or less after their first Intermediate point, and you have been in Advanced for 3 years, you are "stalled out" in Advanced.
+
+```{r stalled}
+stalled_int <- data %>%
+  filter(adv_points > 0) %>%
+  mutate(time_to_adv = as.integer(as.Date(paste(adv_start, '01'), '%B %Y %d')  - as.Date(paste(int_start, '01'), '%B %Y %d'))/30) %>%
+    # Need to take out NAs and 0's from dancers who don't have Int points despite being in Adv or All-Star (those who petitioned or early dancers when the rules were weird :P)
+  filter(is.na(time_to_adv) == FALSE & time_to_adv > 0)  
+
+# Calculate 90th quantile
+int_75 <- quantile(stalled_int$time_to_adv, 0.75)
+  
+# Plot histogram
+int <- ggplot(stalled_int, aes(time_to_adv)) +
+  geom_histogram(binwidth=1, fill="cornflowerblue") +
+  labs(title = "Time spent in Intermediate", x = "Months", y = "Count") +
+  geom_vline(xintercept = int_75) + 
+  annotate("text", x = 55, y = 60, label = paste("75th Percentile = ", round(int_75, 1), "Months"))
+
+stalled_adv <- data %>%
+  filter(als_points > 0) %>%
+  mutate(time_to_als = as.integer(as.Date(paste(als_start, '01'), '%B %Y %d')  - as.Date(paste(adv_start, '01'), '%B %Y %d'))/30) %>%
+    # Need to take out NAs and 0's from dancers who don't have Adv points despite being in All-Star (those who petitioned or early dancers when the rules were weird :P)
+  filter(is.na(time_to_als) == FALSE & time_to_als > 0)  
+
+# Calculate 90th quantile
+adv_75 <- quantile(stalled_adv$time_to_als, 0.75)
+  
+# Plot histogram
+adv <- ggplot(stalled_adv, aes(time_to_als)) +
+  geom_histogram(binwidth=1, fill="cornflowerblue") +
+  labs(title = "Time spent in Advanced", x = "Months", y = "Count") +
+  geom_vline(xintercept = adv_75) +
+  annotate("text", x = 105, y = 15, label = paste("75th Percentile = ", round(adv_75, 1), "Months"))
+
+plot_grid(int, adv, align = "v", ncol = 1, labels = NULL)
+
+# How many stalled dancers are there?
+int <- data %>%
+  filter(int_points > 0, adv_points == 0) %>%
+  mutate(time_in_int = as.integer(as.Date('February 2018 01', '%B %Y %d') - as.Date(paste(int_start, '01'), '%B %Y %d'))/30) %>%
+  count(time_in_int > int_75)
+int_count <- int$n[2]
+int_percent <- round(100*int$n[2]/sum(int$n), 2)
+
+adv <- data %>%
+  filter(adv_points > 0, als_points == 0) %>%
+  mutate(time_in_adv = as.integer(as.Date('February 2018 01', '%B %Y %d') - as.Date(paste(adv_start, '01'), '%B %Y %d'))/30) %>%
+  count(time_in_adv > adv_75)
+adv_count <- adv$n[2]
+adv_percent <- round(100*adv$n[2]/sum(adv$n), 2)
+
+```
+
+There are **`r int_count`** dancers "stalled" at Intermediate, accounting for **`r int_percent`%** of dancers who have Intermediate points but no Advanced points. There are **`r adv_count`** dancers "stalled" at Advanced, accounting for **`r adv_percent`%** of dancers who have Advanced points but no All-Star points. Maybe I'm biased because I'm in NorCal where everyone is awesome and it's easy to feel insecure about your dancing, but the 75th percentile time is WAY longer than I expected, and the percentage of dancers who are "stalled" is also WAY higher than I expected. Maybe some of you are in the same boat as me, in which case -- yay, we're doing okay!
+
+#### Comparing "stalled" Intermediate and Advanced dancers with current All-Star dancers.
+
+```{r by_division1, fig.width=8}
+
+by_division <- data %>%
+  mutate(stalled_division = ifelse(as.integer(as.Date('February 2018 01', '%B %Y %d') - as.Date(paste(int_start, '01'), '%B %Y %d'))/30 > int_75 & int_points > 0 & adv_points == 0, "Intermediate", 
+                                   ifelse(as.integer(as.Date('February 2018 01', '%B %Y %d') - as.Date(paste(adv_start, '01'), '%B %Y %d'))/30 > adv_75 & adv_points > 0 & als_points == 0, "Advanced", 
+                                          ifelse(division == "All-Star", "All-Star", 0)))) %>%
+  filter(stalled_division != 0) 
+
+# Time spent in Novice
+time_spent_nov <- by_division %>%
+  mutate(time_spent_nov = as.integer(as.Date(paste(int_start, '01'), '%B %Y %d') - as.Date(paste(nov_start, '01'), '%B %Y %d'))/30) %>%
+  select(stalled_division, time_spent_nov)  %>%
+  filter(time_spent_nov > 0) %>%
+  group_by(stalled_division) %>%
+  summarize(median = round(median(time_spent_nov),0))
+# Arrange the divisions from Intermediate to All-Star
+time_spent_nov$stalled_division <- factor(time_spent_nov$stalled_division, levels = c("Intermediate", "Advanced", "All-Star"))
+# Plot bars
+plot_time_nov <- ggplot(time_spent_nov, aes(fill=stalled_division, x=stalled_division, y=median, color=stalled_division, label=median)) +
+  geom_bar(stat="identity") +
+  geom_text(nudge_y = 1, fontface = "bold", size = 5) +
+  theme(axis.title.x=element_blank(), legend.position = "none") +
+  coord_cartesian(ylim = c(0, 30)) +
+  labs(title = "How long did it take to get out of Novice?", y = "Months (median)")
+
+# Time spent in Intermediate
+time_spent_int <- by_division %>%
+  mutate(time_spent_int = as.integer(as.Date(paste(adv_start, '01'), '%B %Y %d') - as.Date(paste(int_start, '01'), '%B %Y %d'))/30) %>%
+  select(stalled_division, time_spent_int)  %>%
+  filter(time_spent_int > 0, stalled_division != "Intermediate") %>%
+  group_by(stalled_division) %>%
+  summarize(median = round(median(time_spent_int),0))
+# Arrange the divisions from Advanced to All-Star
+time_spent_int$stalled_division <- factor(time_spent_int$stalled_division, levels = c("Advanced", "All-Star"))
+# Plot bars
+plot_time_int <- ggplot(time_spent_int, aes(fill=stalled_division, x=stalled_division, y=median, color=stalled_division, label=median)) +
+  geom_bar(stat="identity") +
+  geom_text(nudge_y = 1, fontface = "bold", size = 5) +
+  theme(axis.line.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank(), axis.title.y=element_blank(), axis.title.x=element_blank(), legend.position = "none") +
+  coord_cartesian(ylim = c(0, 30)) +
+  labs(title = "...Intermediate?")
+
+plot_grid(plot_time_nov, plot_time_int, align = "h", ncol = 2, labels = NULL)  
+
+# Mann-Whitney tests
+test_nov <- by_division %>%
+  mutate(time_spent_nov = as.integer(as.Date(paste(int_start, '01'), '%B %Y %d') - as.Date(paste(nov_start, '01'), '%B %Y %d'))/30) %>%
+  select(stalled_division, time_spent_nov)  %>%
+  filter(time_spent_nov > 0)
+test_int <- by_division %>%
+  mutate(time_spent_int = as.integer(as.Date(paste(adv_start, '01'), '%B %Y %d') - as.Date(paste(int_start, '01'), '%B %Y %d'))/30) %>%
+  select(stalled_division, time_spent_int)  %>%
+  filter(time_spent_int > 0, stalled_division != "Intermediate")
+test1 <- wilcox.test(time_spent_nov~stalled_division, data=filter(test_nov, stalled_division != "Intermediate"))
+test2 <- wilcox.test(time_spent_nov~stalled_division, data=filter(test_nov, stalled_division != "Advanced"))
+test3 <- wilcox.test(time_spent_nov~stalled_division, data=filter(test_nov, stalled_division != "All-Star"))
+test4 <- wilcox.test(time_spent_int~stalled_division, data=test_int)
+print(c(paste("Time spent in Novice: Intermediate vs. All-Star: p =", test2$p.value), paste("Time spent in Novice: Intermediate vs. Advanced: p =", test3$p.value), paste("Time spent in Novice: Advanced vs. All-Star: p =", test1$p.value), paste("Time spent in Intermediate: Advanced vs. All-Star: p =", test4$p.value)))
+
+```
+
+In terms of number of months spent, dancers who stall out in Intermediate tend to have taken longer to get out of Novice than those stalled in Advanced, who took longer than those in All-Star. In fact, those who stall out in Intermediate took basically twice as long to get out of Novice as those who made it to All-Star. We see the same pattern in Intermediate -- those who make it to All-Star got out of Intermediate almost twice as quickly as those who stall in Advanced.
+
+Since we're dealing with skewed distributions, I've used the nonparametric Mann-Whitney tests to get a measure of significance of the differences. From the super low p values printed above, one could conclude then that we can tell how soon a dancer will "stall out" by how long they take to get out of the previous division, but keep in mind that part of this is explained by the fact that "stalling out" is defined by having spent a long time in a division -- this could either be because 1) the dancer is competing, but not doing very well at competitions, or 2) the dancer doesn't compete very often in the first place. In the second case, they probably didn't compete much in Novice either, and that's why it took them longer to get out. 
+
+```{r by_division2, fig.width=8}
+
+by_division <- data %>%
+  mutate(stalled_division = ifelse(as.integer(as.Date('February 2018 01', '%B %Y %d') - as.Date(paste(int_start, '01'), '%B %Y %d'))/30 > int_75 & int_points > 0 & adv_points == 0, "Intermediate", 
+                                   ifelse(as.integer(as.Date('February 2018 01', '%B %Y %d') - as.Date(paste(adv_start, '01'), '%B %Y %d'))/30 > adv_75 & adv_points > 0 & als_points == 0, "Advanced", 
+                                          ifelse(division == "All-Star", "All-Star", 0)))) %>%
+  filter(stalled_division != 0) 
+
+# Number of finals to get out of Novice
+finals_nov <- by_division %>%
+  group_by(stalled_division) %>%
+  summarize(median = round(median(nov_count),1))
+# Arrange the divisions from Intermediate to All-Star
+finals_nov$stalled_division <- factor(finals_nov$stalled_division, levels = c("Intermediate", "Advanced", "All-Star"))
+# Plot bars
+plot_finals_nov <- ggplot(finals_nov, aes(fill=stalled_division, x=stalled_division, y=median, color=stalled_division, label=median)) +
+  geom_bar(stat="identity") + 
+  geom_text(nudge_y = 0.3, fontface = "bold", size = 5) +
+  theme(axis.title.x=element_blank(), legend.position = "none") +
+  coord_cartesian(ylim = c(0, 8)) +
+  labs(title = "How many finals did it take to get out of Novice?", y = "Number of finals (median)")
+
+# Number of finals to get out of Intermediate
+finals_int <- by_division %>%
+  filter(stalled_division != "Intermediate") %>%
+  group_by(stalled_division) %>%
+  summarize(median = round(median(int_count),1))
+# Arrange the divisions from Advanced to All-Star
+finals_int$stalled_division <- factor(finals_int$stalled_division, levels = c("Advanced", "All-Star"))
+# Plot bars
+plot_finals_int <- ggplot(finals_int, aes(fill=stalled_division, x=stalled_division, y=median, color=stalled_division, label=median)) +
+  geom_bar(stat="identity") + 
+  geom_text(nudge_y = 0.3, fontface = "bold", size = 5) +
+  theme(axis.line.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank(), axis.title.y=element_blank(), axis.title.x=element_blank(), legend.position = "none") +
+  coord_cartesian(ylim = c(0, 8)) +
+  labs(title = "...Intermediate?")
+
+plot_grid(plot_finals_nov, plot_finals_int, align = "h", ncol = 2, labels = NULL)  
+
+```
+
+There's much less difference in how many finals higher-level dancers take to get out of an earlier division. No matter which division a dancer ends up "stalling" at, they seem to final approximately the same number of times in Novice or Intermediate.
+
+```{r by_division3, fig.width=8}
+
+by_division <- data %>%
+  mutate(stalled_division = ifelse(as.integer(as.Date('February 2018 01', '%B %Y %d') - as.Date(paste(int_start, '01'), '%B %Y %d'))/30 > int_75 & int_points > 0 & adv_points == 0, "Intermediate", 
+                                   ifelse(as.integer(as.Date('February 2018 01', '%B %Y %d') - as.Date(paste(adv_start, '01'), '%B %Y %d'))/30 > adv_75 & adv_points > 0 & als_points == 0, "Advanced", 
+                                          ifelse(division == "All-Star", "All-Star", 0)))) %>%
+  filter(stalled_division != 0) 
+
+# Percentage of dancers who got first in Novice
+first_nov <- by_division %>%
+  group_by(stalled_division) %>%
+  count(nov_first) %>%
+  spread(nov_first, n) %>%
+  mutate(percent = round(100*`1`/(`0`+`1`), 0))
+# Arrange the divisions from Intermediate to All-Star
+first_nov$stalled_division <- factor(first_nov$stalled_division, levels = c("Intermediate", "Advanced", "All-Star"))
+# Plot bars
+plot_first_nov <- ggplot(first_nov, aes(fill=stalled_division, x=stalled_division, y=percent, color=stalled_division, label=percent)) +
+  geom_bar(stat="identity") + 
+  geom_text(nudge_y = 3, fontface = "bold", size = 5) +
+  theme(axis.title.x=element_blank(), legend.position = "none") +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(title = "What percentage got first in Novice?", y = "Percent of dancers")
+
+# Percentage of dancers who got first in Intermediate
+first_int <- by_division %>%
+  filter(stalled_division != "Intermediate") %>%
+  group_by(stalled_division) %>%
+  count(int_first) %>%
+  spread(int_first, n) %>%
+  mutate(percent = round(100*`1`/(`0`+`1`), 0))
+# Arrange the divisions from Advanced to All-Star
+first_int$stalled_division <- factor(first_int$stalled_division, levels = c("Advanced", "All-Star"))
+# Plot bars
+plot_first_int <- ggplot(first_int, aes(fill=stalled_division, x=stalled_division, y=percent, color=stalled_division, label=percent)) +
+  geom_bar(stat="identity") + 
+  geom_text(nudge_y = 3, fontface = "bold", size = 5) +
+  theme(axis.line.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank(), axis.title.y=element_blank(), axis.title.x=element_blank(), legend.position = "none") +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(title = "...Intermediate?", y = "Percent of dancers")
+
+plot_grid(plot_first_nov, plot_first_int, align = "h", ncol = 2, labels = NULL)  
+
+```
+
+```{r chisq_test, include=FALSE}
+
+# Chi-Squared testing
+test_table <- first_nov %>%
+  filter(stalled_division == "Intermediate" | stalled_division == "All-Star") %>%
+  select(`0`, `1`)
+test_table <- as.data.frame(test_table)
+test <- chisq.test(test_table[-1])
+pvalue <- round(test$p.value, 10)
+
+```
+
+Another way to look at performance is to see what percentage of dancers got a first place before leaving the division. Here, dancers who make it to All-Star do just a little bit better than those who stall out in earlier divisions. A quick chi-squared test confirms a significant difference in the proportion of dancers who got first in Novice between dancers who stall in Intermediate and those who make it to All-Star (p = `r pvalue`), but no difference between stalled Advanced and All-Star dancers.
+
+All in all, we do see a pattern of dancers doing well (by these metrics) in an earlier division eventually getting to a higher division, but it's not too strong -- so don't be discouraged if you feel stuck where you are :)
