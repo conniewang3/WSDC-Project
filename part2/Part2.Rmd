@@ -28,16 +28,16 @@ I feel a little guilty that it's been so long since my first post -- I really me
 
 
 ## **Introduction**
-After my first post, various people suggested other WSDC-related questions they were curious about. Some of them are fairly trivial to answer -- these are the ones I've picked for today's post. Because, as I've mentioned, I've gone weeks without making any progress on this project at all (my bad). The questions here came from my friends Goga Gordana and Ivy Grey -- thanks y'all!
+After my first post, various people suggested other WSDC-related questions they were curious about. Some of them are fairly trivial to answer, and these are the ones I've picked for today's post hahah. Thanks to everyone sending me questions!
 
 #### Section 1: Masters Division
-Goga brought my attention to an interesting question: is there any value to splitting the Masters division (those who are 50+ years of age) into "Open Masters" and "Novice Masters", or something of that ilk? Apparently there are some events that are considering this -- my first impression is that the goal would be to even the playing field in masters, rather than have some obviously more experienced dancers place every competition. To inform the decision from this standpoint, I looked into:
+An anonymous Masters dancer brought to my attention to an interesting question: is there any value to splitting the Masters division (those who are 50+ years of age) into "Open Masters" and "Novice Masters", or something of that ilk? Apparently there are some events that are considering this -- my first impression is that the goal would be to even the playing field in masters, rather than have some obviously more experienced dancers place every competition. To inform the decision from this standpoint, I looked into:
 
 1. The division breakdown of those who actively compete in Masters, and
 2. The points distribution among Masters competitors.
 
 #### Section 2: Performance Correlates
-Ivy asked a couple questions (among others) regarding performance in later divisions based on performance in earlier divisions, and relatedly, possible predictors of performance. This is a pretty broad topic that I'm planning to cover in a couple different ways later, but for now:
+Another anonymous dancer asked a couple questions regarding performance in later divisions based on performance in earlier divisions, and relatedly, possible predictors of performance. This is a pretty broad topic that I'm planning to cover in a couple different ways later, but for now:
 
 1. Correlation between number of finals it takes to get out of one division and number of finals it takes to get out of the next
 2. Correlation between these statistics and when you "stall out"?
